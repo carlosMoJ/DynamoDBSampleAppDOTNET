@@ -14,7 +14,7 @@ namespace DynamoWebApp.Controllers
         DynamoAccess da = new DynamoAccess();
         public ActionResult Index()
         {
-            Home h = da.GetData();
+            Home h = new Home(); // da.GetData();
             
 
             return View(h);
