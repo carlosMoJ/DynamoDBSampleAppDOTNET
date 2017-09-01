@@ -3,8 +3,11 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using DynamoWebApp.Models;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Web;
 
@@ -14,14 +17,10 @@ namespace DynamoWebApp.Classes
     {
         public static AmazonDynamoDBClient GetLocalClient()
         {
+            // First, set up a DynamoDB client for DynamoDB Local
             AmazonDynamoDBConfig ddbConfig = new AmazonDynamoDBConfig();
-            // This client will access the US East 1 region.
-            ddbConfig.RegionEndpoint = RegionEndpoint.EUWest2;
-            AmazonDynamoDBClient client = new AmazonDynamoDBClient(ddbConfig);
-            //// First, set up a DynamoDB client for DynamoDB Local
-            //AmazonDynamoDBConfig ddbConfig = new AmazonDynamoDBConfig();
-            //ddbConfig.ServiceURL = "http://localhost:8000";
-            //AmazonDynamoDBClient client;
+            ddbConfig.ServiceURL = "http://localhost:8000";
+            AmazonDynamoDBClient client;
             try
             {
                 client = new AmazonDynamoDBClient(ddbConfig);
@@ -33,7 +32,24 @@ namespace DynamoWebApp.Classes
             }
             return (client);
         }
+        public static AmazonDynamoDBClient GetRemoteClient()
+        {
+            AmazonDynamoDBConfig ddbConfig = new AmazonDynamoDBConfig();
+            // This client will access the US East 1 region.
+            ddbConfig.RegionEndpoint = RegionEndpoint.EUWest2;
+            AmazonDynamoDBClient client = new AmazonDynamoDBClient(ddbConfig);
 
+            try
+            {
+                client = new AmazonDynamoDBClient(ddbConfig);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n Error: failed to create a DynamoDB client; " + ex.Message);
+                return (null);
+            }
+            return (client);
+        }
 
         public static Table GetTableObject(AmazonDynamoDBClient client, string tableName)
         {
@@ -50,11 +66,18 @@ namespace DynamoWebApp.Classes
             return (table);
         }
 
-        public Home GetData()
+        public Home GetData(bool local = true)
         {
             Home h = new Home();
-
-            AmazonDynamoDBClient client = GetLocalClient();
+            AmazonDynamoDBClient client;
+            if (local)
+            {
+                client = GetLocalClient();
+            }
+            else
+            {
+                client = GetRemoteClient();
+            }
 
             // Get a Table object for the table that you created in Step 1
             Table table = GetTableObject(client, "Movies");
@@ -72,7 +95,7 @@ namespace DynamoWebApp.Classes
                 Filter = filter
             };
             Search search = table.Scan(filter);
-
+            
             // Display the movie information returned by this query
             Console.WriteLine("\n\n Movies released in the 1950's (Document Model):" +
                        "\n--------------------------------------------------");
@@ -163,6 +186,143 @@ namespace DynamoWebApp.Classes
                 h.info += "</br>";
             }
 
+
+            return h;
+        }
+
+        public Home CreateRemoteTable()
+        {
+            Home h = new Home();
+
+            AmazonDynamoDBClient client = GetRemoteClient();
+
+            // Build a 'CreateTableRequest' for the new table
+            CreateTableRequest createRequest = new CreateTableRequest
+            {
+                TableName = "Movies",
+                AttributeDefinitions = new List<AttributeDefinition>()
+            {
+                new AttributeDefinition
+                {
+                    AttributeName = "year",
+                    AttributeType = "N"
+                },
+                new AttributeDefinition
+                {
+                    AttributeName = "title",
+                    AttributeType = "S"
+                }
+            },
+                KeySchema = new List<KeySchemaElement>()
+            {
+                new KeySchemaElement
+                {
+                    AttributeName = "year",
+                    KeyType = "HASH"
+                },
+                new KeySchemaElement
+                {
+                    AttributeName = "title",
+                    KeyType = "RANGE"
+                }
+            },
+            };
+
+            // Provisioned-throughput settings are required even though
+            // the local test version of DynamoDB ignores them
+            createRequest.ProvisionedThroughput = new ProvisionedThroughput(1, 1);
+
+            // Using the DynamoDB client, make a synchronous CreateTable request
+            CreateTableResponse createResponse;
+            try
+            {
+                createResponse = client.CreateTable(createRequest);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("\n Error: failed to create the new table; " + ex.Message);
+                h.info = "Error: failed to create the new table. " + ex.Message;
+            }
+
+            // Report the status of the new table...
+            h.info = "Created the \"Movies\" table successfully";
+            return h;
+        }
+
+        public static Table GetRemoteTableObject(string tableName)
+        {
+            // First, set up a DynamoDB client for DynamoDB Remote
+            AmazonDynamoDBClient client = GetRemoteClient();
+
+            // Now, create a Table object for the specified table
+            Table table;
+            try
+            {
+                table = Table.LoadTable(client, tableName);
+            }
+            catch (Exception ex)
+            {
+                return (null);
+            }
+            return (table);
+        }
+
+        public Home LoadSampleData()
+        {
+            Home h = new Home();
+            StreamReader sr = null;
+            JsonTextReader jtr = null;
+            JArray movieArray = null;
+            try
+            {
+                sr = new StreamReader("C:\\VS-Projects\\DynamoDBSampleApp\\DynamoWebApp\\moviedata.json");
+                jtr = new JsonTextReader(sr);
+                movieArray = (JArray)JToken.ReadFrom(jtr);
+            }
+            catch (Exception ex)
+            {
+                h.info = "Error: could not read from the 'moviedata.json' file, because: " + ex.Message;
+            }
+            finally
+            {
+                if (jtr != null)
+                    jtr.Close();
+                if (sr != null)
+                    sr.Close();
+            }
+
+            // Get a Table object for the table that you created in Step 1
+            Table table = GetRemoteTableObject("Movies");
+            if (table == null)
+            {
+                h.info = "Didn't find table";
+                return h;
+            }
+
+            // Load the movie data into the table (this could take some time)
+            h.info += String.Format("Now writing {0:#,##0} movie records from moviedata.json (might take 15 minutes)...\n   ...completed: ", movieArray.Count);
+            for (int i = 0, j = 99; i < movieArray.Count; i++)
+            {
+                try
+                {
+                    string itemJson = movieArray[i].ToString();
+                    Document doc = Document.FromJson(itemJson);
+                    table.PutItem(doc);
+                }
+                catch (Exception ex)
+                {
+                    h.info +=String.Format("Error: Could not write the movie record #{0:#,##0}, because {1}", i, ex.Message);
+                }
+                if (i >= j)
+                {
+                    j++;
+                    h.info += String.Format("{0,5:#,##0}, ", j);
+                    if (j % 1000 == 0)
+                        h.info += String.Format("\n                 ");
+                    j += 99;
+                }
+            }
+            h.info += String.Format("\n   Finished writing all movie records to DynamoDB!");
 
             return h;
         }

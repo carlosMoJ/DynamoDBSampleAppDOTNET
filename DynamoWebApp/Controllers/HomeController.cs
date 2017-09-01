@@ -23,15 +23,17 @@ namespace DynamoWebApp.Controllers
         public ActionResult About()
         {
             ViewBag.Message = "Your application description page.";
+            Home h = da.GetData(false);
 
-            return View();
+
+            return View(h);
         }
 
         public ActionResult Contact()
         {
             ViewBag.Message = "Your contact page.";
-
-            return View();
+            Home h = da.LoadSampleData();
+            return View(h);
         }
     }
 }
