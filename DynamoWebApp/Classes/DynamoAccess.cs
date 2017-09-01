@@ -1,4 +1,5 @@
-﻿using Amazon.DynamoDBv2;
+﻿using Amazon;
+using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DocumentModel;
 using Amazon.DynamoDBv2.Model;
 using DynamoWebApp.Models;
@@ -13,10 +14,14 @@ namespace DynamoWebApp.Classes
     {
         public static AmazonDynamoDBClient GetLocalClient()
         {
-            // First, set up a DynamoDB client for DynamoDB Local
             AmazonDynamoDBConfig ddbConfig = new AmazonDynamoDBConfig();
-            ddbConfig.ServiceURL = "http://localhost:8000";
-            AmazonDynamoDBClient client;
+            // This client will access the US East 1 region.
+            ddbConfig.RegionEndpoint = RegionEndpoint.EUWest2;
+            AmazonDynamoDBClient client = new AmazonDynamoDBClient(ddbConfig);
+            //// First, set up a DynamoDB client for DynamoDB Local
+            //AmazonDynamoDBConfig ddbConfig = new AmazonDynamoDBConfig();
+            //ddbConfig.ServiceURL = "http://localhost:8000";
+            //AmazonDynamoDBClient client;
             try
             {
                 client = new AmazonDynamoDBClient(ddbConfig);
