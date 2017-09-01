@@ -32,7 +32,7 @@ namespace DynamoWebApp.Controllers
         public ActionResult Contact()
         {
             ViewBag.Message = "Your contact page.";
-            Home h = da.LoadSampleData();
+            Home h = da.AddNewEntry();
             return View(h);
         }
     }

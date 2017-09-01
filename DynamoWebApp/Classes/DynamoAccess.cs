@@ -326,5 +326,38 @@ namespace DynamoWebApp.Classes
 
             return h;
         }
+
+        public Home AddNewEntry()
+        {
+            Home h = new Home();
+            AmazonDynamoDBClient client = GetRemoteClient();
+            Table table = GetTableObject(client,"Movies");
+            if (table == null)
+            {
+                h.info = "Table not found";
+                return h;
+            }
+
+            // Create a Document representing the movie item to be written to the table
+            Document document = new Document();
+            document["year"] = 2014;
+            document["title"] = "The Big New Movie PREQUEL";
+            document["century"] = 21;
+            document["UploadedBy"] = "Carlos";
+            document["info"] = Document.FromJson("{\"plot\" : \"Nothing happens at all.\",\"rating\" : 1,\"carlosrating\" : 2}");
+
+            // Use Table.PutItem to write the document item to the table
+            try
+            {
+                table.PutItem(document);
+                h.info = "\nPutItem succeeded.\n";
+            }
+            catch (Exception ex)
+            {
+                h.info = "\n Error: Table.PutItem failed because: " + ex.Message;
+            }
+
+            return h;
+        }
     }
 }
