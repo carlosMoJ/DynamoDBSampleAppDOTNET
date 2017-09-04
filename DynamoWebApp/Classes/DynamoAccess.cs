@@ -9,6 +9,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Web;
 
 namespace DynamoWebApp.Classes
@@ -188,6 +189,196 @@ namespace DynamoWebApp.Classes
 
 
             return h;
+        }
+
+        public Home GetDataQuery()
+        {
+            Home h = new Home();
+            string commaSep = ", ";
+            string movieFormatString = "    \"{0}\", lead actor: {1}, genres: {2}, carlosrating: {3}, century: {4}, UploadedBy: {5}, director: {6}";
+
+            AmazonDynamoDBClient client = GetRemoteClient();
+
+            // Get a Table object for the table that you created in Step 1
+            Table table = GetTableObject(client, "Movies");
+            if (table == null)
+            {
+                h.info = "No table found";
+                return h;
+            }
+
+            /*-----------------------------------------------------------------------
+             *  4.1.1:  Call Table.Query to initiate a query for all movies with
+             *          year == 1985, using an empty filter expression.
+             *-----------------------------------------------------------------------*/
+            Search search;
+            try
+            {
+                search = table.Query(2015, new Expression());
+            }
+            catch (Exception ex)
+            {
+                h.info = "<br/>Error: 1985 query failed because: " + ex.Message;
+                return h;
+            }
+
+            // Display the titles of the movies returned by this query
+            List<Document> docList = new List<Document>();
+            h.info = "<br/>All movies released in 2015: <br/>-----------------------------------------------";
+            do
+            {
+                try { docList = search.GetNextSet(); }
+                catch (Exception ex)
+                {
+                   h.info += "<br/>Error: Search.GetNextStep failed because: " + ex.Message;
+                   break;
+                }
+                foreach (var doc in docList)
+                   h.info += "    " + doc["title"];
+            } while (!search.IsDone);
+
+
+            /*-----------------------------------------------------------------------
+             *  4.1.2a:  Call Table.Query to initiate a query for all movies where
+             *           year equals 2014 or 2015,
+             *           returning the lead actor and genres of each.
+             *-----------------------------------------------------------------------*/
+            QueryOperationConfig config = new QueryOperationConfig();
+            config.Filter = new QueryFilter();
+            config.Filter.AddCondition("year", QueryOperator.Equal, new DynamoDBEntry[] { 2014 });
+            config.AttributesToGet = new List<string> { "title", "info", "century", "UploadedBy" };
+            config.Select = SelectValues.SpecificAttributes;
+
+            try
+            {
+                search = table.Query(config);
+            }
+            catch (Exception ex)
+            {
+                h.info += "<br/>Error: 2014 query failed because: " + ex.Message;
+                return h;
+            }
+
+            // Display the movie information returned by this query
+            h.info += "<br/><br/>Movies released in 2014 (Document Model):<br/>-----------------------------------------------------------------------------";
+            docList = new List<Document>();
+            Document infoDoc;
+            do
+            {
+                try
+                {
+                    docList = search.GetNextSet();
+                }
+                catch (Exception ex)
+                {
+                    h.info +="<br/>Error: Search.GetNextStep failed because: " + ex.Message;
+                    break;
+                }
+                foreach (var doc in docList)
+                {
+                    try
+                    {
+                        infoDoc = doc["info"].AsDocument();
+                        string actor = infoDoc.ContainsKey("actors") ? infoDoc["actors"].AsArrayOfString()[0] : "No lead actor";
+                        string title = doc.ContainsKey("title") ? doc["title"].ToString() : "No title";
+                        string genres = infoDoc.ContainsKey("genres") ? string.Join(commaSep, infoDoc["genres"].AsArrayOfString()) : "No genres";
+                        string carlosRating = infoDoc.ContainsKey("carlosrating") ? infoDoc["carlosrating"].ToString() : "No carlosrating";
+                        string century = doc.ContainsKey("century") ? doc["century"].ToString() : "No century";
+                        string UploadedBy = doc.ContainsKey("UploadedBy") ? doc["UploadedBy"].ToString() : "No UploadedBy";
+                        string directors = infoDoc.ContainsKey("directors") ? infoDoc["directors"].AsArrayOfString()[0] : "No lead director";
+                        h.info += "<br/><br/>" + String.Format(movieFormatString,
+                                   title,
+                                   actor,
+                                   genres,
+                                   carlosRating,
+                                   century,
+                                   UploadedBy,
+                                   directors);
+                    }
+                    catch (Exception ex)
+                    {
+                        h.info += "<br/>Error: Search.GetNextStep failed because: " + ex.Message;
+                    }
+                }
+            } while (!search.IsDone);
+
+            /*-----------------------------------------------------------------------
+             *  4.2a:  Call Table.Scan to return the movies released in the 1950's,
+             *         displaying title, year, lead actor and lead director.
+             *-----------------------------------------------------------------------*/
+            ScanFilter filter = new ScanFilter();
+            filter.AddCondition("year", ScanOperator.Between, new DynamoDBEntry[] { 2014, 2015 });
+            //ScanOperationConfig configScan = new ScanOperationConfig
+            //{
+            //    AttributesToGet = new List<string> { "year, title, info" },
+            //    Filter = filter
+            //};
+            search = table.Scan(filter);
+
+            // Display the movie information returned by this query
+            h.info += "<br/><br/><b>Movies released in 2014 - 2015 (Document Model)</b><br/><br<br/>";
+            docList = new List<Document>();
+            do
+            {
+                try
+                {
+                    docList = search.GetNextSet();
+                }
+                catch (Exception ex)
+                {
+                    h.info += "<br/> Error: Search.GetNextStep failed because: " + ex.Message;
+                    break;
+                }
+                foreach (var doc in docList)
+                {
+                    infoDoc = doc["info"].AsDocument();
+                    string actor = infoDoc.ContainsKey("actors") ? infoDoc["actors"].AsArrayOfString()[0] : "No lead actor";
+                    string title = doc.ContainsKey("title") ? doc["title"].ToString() : "No title";
+                    string genres = infoDoc.ContainsKey("genres") ? string.Join(commaSep, infoDoc["genres"].AsArrayOfString()) : "No genres";
+                    string carlosRating = infoDoc.ContainsKey("carlosrating") ? infoDoc["carlosrating"].ToString() : "No carlosrating";
+                    string century = doc.ContainsKey("century") ? doc["century"].ToString() : "No century";
+                    string UploadedBy = doc.ContainsKey("UploadedBy") ? doc["UploadedBy"].ToString() : "No UploadedBy";
+                    string directors = infoDoc.ContainsKey("directors") ? infoDoc["directors"].AsArrayOfString()[0] : "No lead director";
+                    h.info += "<br/><br/>" + String.Format(movieFormatString,
+                               title,
+                               actor,
+                               genres,
+                               carlosRating,
+                               century,
+                               UploadedBy,
+                               directors);
+                }
+            } while (!search.IsDone);
+
+
+            return h;
+        }
+
+        public static string GetDdbListAsString(List<AttributeValue> strList)
+        {
+            string commaSep = ", ";
+            StringBuilder sb = new StringBuilder();
+            string str = null;
+            AttributeValue av;
+            for (int i = 0; i < strList.Count; i++)
+            {
+                av = strList[i];
+                if (av.S != null)
+                    str = av.S;
+                else if (av.N != null)
+                    str = av.N;
+                else if (av.SS != null)
+                    str = string.Join(commaSep, av.SS.ToArray());
+                else if (av.NS != null)
+                    str = string.Join(commaSep, av.NS.ToArray());
+                if (str != null)
+                {
+                    if (i > 0)
+                        sb.Append(commaSep);
+                    sb.Append(str);
+                }
+            }
+            return (sb.ToString());
         }
 
         public Home CreateRemoteTable()

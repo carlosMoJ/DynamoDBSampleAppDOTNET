@@ -23,7 +23,8 @@ namespace DynamoWebApp.Controllers
         public ActionResult About()
         {
             ViewBag.Message = "Your application description page.";
-            Home h = da.GetData(false);
+            //Home h = da.GetData(false);
+            Home h = da.GetDataQuery();
 
 
             return View(h);
